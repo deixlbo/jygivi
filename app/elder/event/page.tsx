@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import dynamic from "next/dynamic"
 
-// Load LocationPicker only on the client to avoid "window is not defined" during prerender
+// Load LocationPicker only on the client
 const LocationPicker = dynamic(
   () => import("@/components/location-picker").then((mod) => mod.LocationPicker),
   { ssr: false }
@@ -25,7 +25,6 @@ interface JoinRequest {
   status: "pending" | "approved" | "rejected"
 }
 
-// renamed to avoid collision with DOM Event
 interface MyEvent {
   id: string
   eventTitle: string
@@ -103,20 +102,30 @@ export default function ElderEventPage() {
   const [longitude, setLongitude] = useState<number | null>(null)
   const [maxAttendees, setMaxAttendees] = useState(50)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const [greeting, setGreeting] = useState("Good Morning")
 
   useEffect(() => {
-    const getGreeting = () => {
-      const now = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" })
-      const hour = new Date(now).getHours()
-      if (hour < 12) return "Good Morning"
-      if (hour < 18) return "Good Afternoon"
-      return "Good Evening"
+    // Load events from localStorage or API
+    const loadEvents = () => {
+      try {
+        const savedEvents = localStorage.getItem("elderEvents")
+        if (savedEvents) {
+          setEvents(JSON.parse(savedEvents))
+        }
+      } catch (error) {
+        console.error("Failed to load events:", error)
+      } finally {
+        setLoadingEvents(false)
+      }
     }
-    setGreeting(getGreeting())
-    // Placeholder: Initialize with empty events
-    setLoadingEvents(false)
+    loadEvents()
   }, [])
+
+  // Save events to localStorage whenever they change
+  useEffect(() => {
+    if (!loadingEvents) {
+      localStorage.setItem("elderEvents", JSON.stringify(events))
+    }
+  }, [events, loadingEvents])
 
   const resetEventForm = () => {
     setEventTitle("")
@@ -149,7 +158,14 @@ export default function ElderEventPage() {
   }
 
   const handleCreateEvent = async () => {
-    if (!eventTitle.trim() || !eventDescription.trim() || !eventDate || !eventTime || !eventLocation.trim()) return
+    if (!eventTitle.trim() || !eventDescription.trim() || !eventDate || !eventTime || !eventLocation.trim()) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      })
+      return
+    }
 
     try {
       const newEvent: MyEvent = {
@@ -159,8 +175,8 @@ export default function ElderEventPage() {
         date: eventDate,
         time: eventTime,
         location: eventLocation,
-        latitude,
-        longitude,
+        latitude: latitude || undefined,
+        longitude: longitude || undefined,
         attendees: [],
         joinRequests: [],
         maxAttendees,
@@ -200,8 +216,8 @@ export default function ElderEventPage() {
                 date: eventDate,
                 time: eventTime,
                 location: eventLocation,
-                latitude,
-                longitude,
+                latitude: latitude || undefined,
+                longitude: longitude || undefined,
                 maxAttendees,
               }
             : e
@@ -255,27 +271,59 @@ export default function ElderEventPage() {
   }
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-background">
-      {/* Sidebar - Hidden on mobile unless menu is open (copied from home page) */}
+    <div className="flex flex-col min-h-screen bg-background">
+      {/* Top Navigation Bar for Mobile */}
+      <div className="md:hidden flex items-center justify-between p-4 border-b bg-white shadow-sm">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="text-emerald-800 hover:bg-emerald-50 rounded-full"
+          >
+            <Menu className="w-6 h-6" />
+          </Button>
+          <div className="flex items-center gap-2">
+            <img src="/ease.jpg" alt="ElderEase Logo" className="w-8 h-8 rounded-lg object-cover" />
+            <h2 className="text-lg font-bold text-emerald-800">ElderEase</h2>
+          </div>
+        </div>
+        <h1 className="text-xl font-bold text-emerald-800">Events</h1>
+      </div>
+
+      {/* Desktop Header */}
+      <div className="hidden md:flex items-center justify-between p-6 border-b bg-white">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <img src="/ease.jpg" alt="ElderEase Logo" className="w-10 h-10 rounded-lg object-cover" />
+            <div>
+              <h2 className="text-xl font-bold text-emerald-800">ElderEase</h2>
+              <p className="text-sm text-muted-foreground">Community Events Platform</p>
+            </div>
+          </div>
+        </div>
+        <Button onClick={() => setShowCreateDialog(true)} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
+          <Plus className="w-4 h-4" />
+          Create Event
+        </Button>
+      </div>
+
+      {/* Sidebar */}
       <div
-        className={`
-          ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} 
-          md:translate-x-0 fixed md:sticky md:top-0 inset-y-0 left-0 z-30
-          w-64 md:w-72 text-white flex flex-col transition-transform duration-300 ease-in-out
-          md:flex shadow-2xl h-screen
-        `}
+        className={`fixed md:relative inset-y-0 left-0 z-40 w-64 md:w-72 flex flex-col shadow-2xl h-screen transition-transform duration-300 ease-in-out transform ${
+          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        } md:translate-x-0 md:flex`}
         style={{
-          backgroundColor: "#047857",
-          background: `linear-gradient(180deg, #047857, #059669)`
+          background: "linear-gradient(180deg, #047857, #059669)",
         }}
       >
-        {/* Mobile header with logo + close */}
+        {/* Mobile Header inside Sidebar */}
         <div className="flex items-center justify-between p-4 border-b border-emerald-700 md:hidden">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
               <img src="/ease.jpg" alt="ElderEase Logo" className="w-8 h-8 rounded-lg object-cover" />
             </div>
-            <h2 className="text-lg font-bold">ElderEase</h2>
+            <h2 className="text-lg font-bold text-white">ElderEase</h2>
           </div>
           <Button
             variant="ghost"
@@ -287,19 +335,20 @@ export default function ElderEventPage() {
           </Button>
         </div>
 
-        {/* Desktop Logo Section (clean, no greeting) */}
+        {/* Desktop Logo */}
         <div className="hidden md:block p-6 border-b border-emerald-700">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm ring-2 ring-white/20">
               <img src="/ease.jpg" alt="ElderEase Logo" className="w-10 h-10 rounded-lg object-cover" />
             </div>
             <div>
-              <h2 className="text-xl font-bold">ElderEase</h2>
+              <h2 className="text-xl font-bold text-white">ElderEase</h2>
+              <p className="text-xs text-emerald-200">Community Platform</p>
             </div>
           </div>
         </div>
 
-        {/* Navigation (only the requested items) */}
+        {/* Navigation */}
         <nav className="flex-1 p-4">
           <div className="space-y-1">
             {[
@@ -330,23 +379,32 @@ export default function ElderEventPage() {
         </nav>
       </div>
 
-      {/* Mobile Menu Overlay */}
+      {/* Mobile Overlay */}
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden"
+          className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
-      {/* End Sidebar */}
 
       {/* Main Content */}
       <div className="flex-1 p-4 md:p-8">
         <div className="max-w-6xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
+          <div className="hidden md:flex items-center justify-between mb-6">
             <h1 className="text-2xl md:text-3xl font-bold text-foreground">Events</h1>
-            <Button onClick={() => setShowCreateDialog(true)} className="gap-2">
+            <Button onClick={() => setShowCreateDialog(true)} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
               <Plus className="w-4 h-4" />
               Create Event
+            </Button>
+          </div>
+
+          <div className="md:hidden mb-6">
+            <Button 
+              onClick={() => setShowCreateDialog(true)} 
+              className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700"
+            >
+              <Plus className="w-4 h-4" />
+              Create New Event
             </Button>
           </div>
 
@@ -354,24 +412,39 @@ export default function ElderEventPage() {
             <Card className="text-center py-12">
               <CardContent>
                 <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">No events found. Create one to get started!</p>
+                <h3 className="text-lg font-semibold mb-2">No events yet</h3>
+                <p className="text-muted-foreground mb-4">Create your first event to bring the community together!</p>
+                <Button onClick={() => setShowCreateDialog(true)} className="gap-2">
+                  <Plus className="w-4 h-4" />
+                  Create Your First Event
+                </Button>
               </CardContent>
             </Card>
           ) : (
             <div className="grid gap-4">
               {events.map((event) => (
-                <Card key={event.id} className="hover:shadow-lg transition-shadow border-emerald-200 hover:border-emerald-300">
+                <Card key={event.id} className="hover:shadow-lg transition-shadow border-emerald-100 hover:border-emerald-300">
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <CardTitle className="text-lg md:text-xl">{event.eventTitle}</CardTitle>
-                        <p className="text-sm text-muted-foreground mt-1">{event.description}</p>
+                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{event.description}</p>
                       </div>
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => startEditEvent(event)}>
+                      <div className="flex gap-2 ml-4">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => startEditEvent(event)}
+                          className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50"
+                        >
                           <Edit2 className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteEvent(event.id)}>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleDeleteEvent(event.id)}
+                          className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                        >
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
@@ -387,12 +460,12 @@ export default function ElderEventPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <MapPin className="w-4 h-4 text-muted-foreground" />
-                        <span>{event.location}</span>
+                        <span className="truncate">{event.location}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Users className="w-4 h-4 text-muted-foreground" />
                         <span>
-                          {event.attendees.length}/{event.maxAttendees}
+                          {event.attendees.length}/{event.maxAttendees} attendees
                         </span>
                       </div>
                     </div>
@@ -405,7 +478,7 @@ export default function ElderEventPage() {
         </div>
       </div>
 
-      {/* Create Event Dialog */}
+      {/* Create & Edit Dialogs */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -416,7 +489,7 @@ export default function ElderEventPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Event Title</label>
+              <label className="text-sm font-medium">Event Title *</label>
               <Input
                 placeholder="What's the event about?"
                 value={eventTitle}
@@ -424,7 +497,7 @@ export default function ElderEventPage() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Description</label>
+              <label className="text-sm font-medium">Description *</label>
               <Textarea
                 placeholder="Describe the event in detail..."
                 value={eventDescription}
@@ -434,16 +507,16 @@ export default function ElderEventPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Date</label>
+                <label className="text-sm font-medium">Date *</label>
                 <Input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Time</label>
+                <label className="text-sm font-medium">Time *</label>
                 <Input type="time" value={eventTime} onChange={(e) => setEventTime(e.target.value)} />
               </div>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Location</label>
+              <label className="text-sm font-medium">Location *</label>
               <LocationPicker
                 onLocationSelect={handleLocationSelect}
                 initialAddress={eventLocation}
@@ -457,11 +530,15 @@ export default function ElderEventPage() {
                 type="number"
                 min="1"
                 value={maxAttendees}
-                onChange={(e) => setMaxAttendees(Number.parseInt(e.target.value))}
+                onChange={(e) => setMaxAttendees(Number.parseInt(e.target.value) || 1)}
               />
             </div>
             <div className="flex flex-col sm:flex-row gap-2 pt-4">
-              <Button onClick={handleCreateEvent} className="flex-1">
+              <Button 
+                onClick={handleCreateEvent} 
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                disabled={!eventTitle.trim() || !eventDescription.trim() || !eventDate || !eventTime || !eventLocation.trim()}
+              >
                 Create Event
               </Button>
               <Button onClick={() => setShowCreateDialog(false)} variant="outline" className="flex-1">
@@ -472,7 +549,6 @@ export default function ElderEventPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Event Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -481,7 +557,7 @@ export default function ElderEventPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Event Title</label>
+              <label className="text-sm font-medium">Event Title *</label>
               <Input
                 placeholder="What's the event about?"
                 value={eventTitle}
@@ -489,7 +565,7 @@ export default function ElderEventPage() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Description</label>
+              <label className="text-sm font-medium">Description *</label>
               <Textarea
                 placeholder="Describe the event in detail..."
                 value={eventDescription}
@@ -499,16 +575,16 @@ export default function ElderEventPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Date</label>
+                <label className="text-sm font-medium">Date *</label>
                 <Input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Time</label>
+                <label className="text-sm font-medium">Time *</label>
                 <Input type="time" value={eventTime} onChange={(e) => setEventTime(e.target.value)} />
               </div>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Location</label>
+              <label className="text-sm font-medium">Location *</label>
               <LocationPicker
                 onLocationSelect={handleLocationSelect}
                 initialAddress={eventLocation}
@@ -522,11 +598,15 @@ export default function ElderEventPage() {
                 type="number"
                 min="1"
                 value={maxAttendees}
-                onChange={(e) => setMaxAttendees(Number.parseInt(e.target.value))}
+                onChange={(e) => setMaxAttendees(Number.parseInt(e.target.value) || 1)}
               />
             </div>
             <div className="flex flex-col sm:flex-row gap-2 pt-4">
-              <Button onClick={handleEditEvent} className="flex-1">
+              <Button 
+                onClick={handleEditEvent} 
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                disabled={!eventTitle.trim() || !eventDescription.trim() || !eventDate || !eventTime || !eventLocation.trim()}
+              >
                 Save Changes
               </Button>
               <Button onClick={() => setShowEditDialog(false)} variant="outline" className="flex-1">
